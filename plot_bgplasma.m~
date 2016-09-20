@@ -1,0 +1,106 @@
+function plot_bgplasma(datvol,field_in,logscale,limits)
+%plot_bgplasma(datvol,field,logscale=0(default)|1,[limcolorlow limcolorhigh](optional))
+%by J.Guterl Sept 2016
+if nargin<3
+    logscale=0;
+end
+if nargin <2
+    error('missing input arguments');
+end
+
+if iscell(field_in)==0
+    field_{1}=field_in;
+else
+    field_=field_in;
+end
+
+disp(['# fields called:' num2str(length(field_))]);
+for p=1:length(field_)
+    
+    field=field_{p};
+   
+%load d3d contour
+run d3dlim.m
+%refine number of points for d3d contour
+[xlim_,ylim_]=refine_d3dlim(xlim_,ylim_,1);
+%find external boundary of simulations, including the wall
+ir=datvol.Irwall;
+ x=datvol.R_(ir,1:datvol.Ncell(ir));
+    y=datvol.Z_(ir,1:datvol.Ncell(ir));
+    d=(y(end)-ylim_).^2+(x(end)-xlim_).^2;
+    idmin=find(d==min(d));
+    d=(y(1)-ylim_).^2+(x(1)-xlim_).^2;
+    idmax=find(d==min(d));
+    if idmax<idmin
+        disp('inverse');
+        idmax=length(xlim)
+    end
+    ir=datvol.Irwall+1; %f
+    x=datvol.R_(ir,1:datvol.Ncell(ir));
+    y=datvol.Z_(ir,1:datvol.Ncell(ir));
+    d=(y(end)-ylim_).^2+(x(end)-xlim_).^2;
+    xlast=[x xlim_(idmin:idmax) x(1)];
+    ylast=[y ylim_(idmin:idmax) y(1)];
+    %find the internal boundary for simulation
+    ir=1;
+    xfirst=datvol.R_(ir,1:datvol.Ncell(ir));
+    yfirst=datvol.Z_(ir,1:datvol.Ncell(ir));
+    %figure;plot(xfirst,yfirst,xlast,ylast,'r');
+    
+    eval(['data=datvol.' field ';']);
+    R=unique(datvol.R);
+    Z=unique(datvol.Z);
+    R=R(R>0);
+
+%create interpolation function for the requested data
+F = scatteredInterpolant(datvol.R,datvol.Z,data);
+d=10;
+[RR,ZZ] = meshgrid(R(1:d:end),Z(1:d:end));
+data_ = F(RR,ZZ);
+% verify if points are in the simulation domain. If not, put Nan value to
+% data_
+in=inpolygon(RR,ZZ,xlast,ylast);
+iq=find(in==0);
+    data_(iq)=NaN;
+in=inpolygon(RR,ZZ,xfirst,yfirst);
+iq=find(in==1);
+    data_(iq)=NaN;
+% finally plot the contour
+figure;
+if logscale==0
+[C,h]=contourf(RR,ZZ,data_);colorbar;shading flat
+if nargin>4
+h.LevelStep=level;
+end
+h.LineStyle='none';
+if nargin>3
+caxis([limits(1) limits(2)]);
+end
+else
+[C,h]=contourf(RR,ZZ,log(abs(data_)));if nargin>4
+
+
+h.LevelStep=log10(level);end;
+h.LineStyle='none';
+shading flat
+if nargin>3
+range(1)=(limits(1));range(2)=(limits(2));
+else
+range=([(min(min(abs(data_)))) (max(max(abs(data_))))])
+end
+c=logspace(log10(range(1)),log10(range(2)),6)
+colormap(bone);  %Color palate named "bone"
+caxis(log10([c(1) c(end)]));
+colorbar('FontSize',11,'YTick',log10(c),'YTickLabel',c);
+end
+
+hold on;
+plot(xlast,ylast,'r');
+plot(xfirst,yfirst,'r');
+plot(xlim_,ylim_,'k');
+title(['Case:' datvol.casename '; ' field]);
+axis equal;
+xlabel('R[m]');ylabel('Z[m]');
+
+end
+end
